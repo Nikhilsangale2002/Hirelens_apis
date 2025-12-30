@@ -6,10 +6,10 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///hirelens.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
-    # JWT
+    # JWT - Hybrid Security Approach
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
-    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=30)  # Short-lived for speed
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)    # Long-lived in DB for security
     
     # File Upload
     UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
@@ -20,6 +20,11 @@ class Config:
     AI_PROVIDER = os.getenv('AI_PROVIDER', 'gemini')  # gemini, openai, local
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+    
+    # Supabase OAuth Configuration
+    SUPABASE_URL = os.getenv('SUPABASE_URL', '')
+    SUPABASE_ANON_KEY = os.getenv('SUPABASE_ANON_KEY', '')
+    SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY', '')
     
     # Plans Configuration
     PLANS = {

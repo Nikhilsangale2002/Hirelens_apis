@@ -1,26 +1,13 @@
 from flask import Flask
+from flask_cors import CORS
 from config import Config
 from extensions import db, jwt
 from routes.auth import auth_bp
 from routes.jobs import jobs_bp
 from routes.resumes import resumes_bp
 from routes.candidates import candidates_bp
-import sys
-import os
-
-# Add middleware to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'Hirelens_monitoring'))
-from middleware import register_error_handlers, request_logger
-from middleware.cors import configure_cors
-from middleware.rate_limiter import RateLimiter
 import threading
 import time
-
-def cleanup_rate_limits():
-    """Background task to cleanup old rate limit entries"""
-    while True:
-        time.sleep(3600)  # Run every hour
-        RateLimiter.cleanup_old_entries()
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -30,16 +17,14 @@ def create_app(config_class=Config):
     db.init_app(app)
     jwt.init_app(app)
     
-    # Configure CORS
-    configure_cors(app)
-    
-    # Register middleware
-    register_error_handlers(app)
-    request_logger(app)
-    
-    # Start rate limit cleanup thread
-    cleanup_thread = threading.Thread(target=cleanup_rate_limits, daemon=True)
-    cleanup_thread.start()
+    # Configure CORS with specific origin (security improvement)
+    allowed_origins = app.config.get('ALLOWED_ORIGINS', 'http://localhost:3000')
+    CORS(app, 
+         origins=allowed_origins.split(','),
+         supports_credentials=True,
+         allow_headers=['Content-Type', 'Authorization', 'X-Session-Token'],
+         expose_headers=['X-RateLimit-Remaining', 'X-RateLimit-Reset']
+    )
     
     # Register blueprints
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -47,9 +32,13 @@ def create_app(config_class=Config):
     app.register_blueprint(resumes_bp, url_prefix='/api/resumes')
     app.register_blueprint(candidates_bp, url_prefix='/api/candidates')
     
-    # Create tables
+    # Create tables (only if they don't exist)
     with app.app_context():
-        db.create_all()
+        try:
+            db.create_all()
+        except Exception as e:
+            # Log error but don't fail - tables may already exist or be in process of creation
+            print(f"Table creation skipped or failed: {e}")
     
     @app.route('/api/health')
     def health_check():

@@ -10,3 +10,5 @@ python-docx==1.1.0
 google-generativeai==0.3.1
 Werkzeug==3.0.1
 gunicorn==21.2.0
+supabase==2.10.0
+requests==2.31.0

@@ -11,6 +11,7 @@ jobs_bp = Blueprint('jobs', __name__)
 @jwt_required()
 def create_job():
     try:
+        # Get user from JWT
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
         
