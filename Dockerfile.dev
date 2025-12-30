@@ -1,0 +1,29 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    postgresql-client \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Create uploads directory
+RUN mkdir -p uploads
+
+# Set environment variables
+ENV FLASK_APP=app.py
+ENV FLASK_DEBUG=True
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 5000
+
+# Development: Run with Flask development server
+CMD ["python", "app.py"]
