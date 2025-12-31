@@ -2,17 +2,110 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models.user import User
 from models.job import Job
-from extensions import db
+from models.resume import Resume
+from extensions import db, cache_get, cache_set, cache_delete, cache_delete_pattern
+from routes.notifications import create_notification
 from config import Config
+import logging
 
 jobs_bp = Blueprint('jobs', __name__)
+logger = logging.getLogger(__name__)
+
+# Public endpoint for careers page (no authentication required)
+@jobs_bp.route('/public', methods=['GET'])
+def get_public_jobs():
+    """Get all active jobs for public careers page (no auth required)"""
+    try:
+        # Check cache first
+        cache_key = 'jobs_public_active'
+        cached_data = cache_get(cache_key)
+        if cached_data:
+            logger.info("Returning cached public jobs")
+            return jsonify({**cached_data, 'cached': True}), 200
+        
+        # Query only active jobs
+        jobs = Job.query.filter_by(status='active').order_by(Job.created_at.desc()).all()
+        
+        # Return basic job info (no sensitive data)
+        jobs_data = [{
+            'id': job.id,
+            'title': job.title,
+            'description': job.description,
+            'department': job.department,
+            'location': job.location,
+            'job_type': job.job_type,
+            'experience_required': job.experience_required,
+            'skills_required': job.skills_required,
+            'education': job.education,
+            'salary_range': job.salary_range,
+            'created_at': job.created_at.isoformat() if job.created_at else None
+        } for job in jobs]
+        
+        response_data = {
+            'jobs': jobs_data,
+            'total': len(jobs_data),
+            'cached': False
+        }
+        
+        # Cache for 5 minutes
+        cache_set(cache_key, response_data, expire=300)
+        
+        return jsonify(response_data), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching public jobs: {str(e)}")
+        return jsonify({'error': 'Failed to load jobs'}), 500
+
+# Public endpoint for single job detail (no authentication required)
+@jobs_bp.route('/public/<int:job_id>', methods=['GET'])
+def get_public_job(job_id):
+    """Get single active job details for public view (no auth required)"""
+    try:
+        # Check cache first
+        cache_key = f'job_public_detail:{job_id}'
+        cached_data = cache_get(cache_key)
+        if cached_data:
+            logger.info(f"Returning cached public job {job_id}")
+            return jsonify({**cached_data, 'cached': True}), 200
+        
+        # Only allow fetching active jobs publicly
+        job = Job.query.filter_by(id=job_id, status='active').first()
+        
+        if not job:
+            return jsonify({'error': 'Job not found or not available'}), 404
+        
+        # Return basic job info (no sensitive data like user_id)
+        job_data = {
+            'id': job.id,
+            'title': job.title,
+            'description': job.description,
+            'department': job.department,
+            'location': job.location,
+            'job_type': job.job_type,
+            'experience_required': job.experience_required,
+            'skills_required': job.skills_required,
+            'education': job.education,
+            'salary_range': job.salary_range,
+            'created_at': job.created_at.isoformat() if job.created_at else None
+        }
+        
+        response_data = {'job': job_data, 'cached': False}
+        
+        # Cache for 5 minutes
+        cache_set(cache_key, response_data, expire=300)
+        
+        return jsonify(response_data), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching public job {job_id}: {str(e)}")
+        return jsonify({'error': 'Failed to load job details'}), 500
 
 @jobs_bp.route('/', methods=['POST'])
 @jwt_required()
 def create_job():
     try:
         # Get user from JWT
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert to int for DB queries
         user = User.query.get(user_id)
         
         if not user:
@@ -45,6 +138,27 @@ def create_job():
         user.jobs_used += 1
         db.session.commit()
         
+        # Invalidate cache
+        cache_delete(f"jobs_list:{user_id}")
+        cache_delete_pattern(f"dashboard_*:{user_id}")
+        cache_delete(f"user_plan:{user_id}")
+        # Invalidate public cache when new job is created
+        cache_delete('jobs_public_active')
+        
+        # Create notification for job creation
+        try:
+            create_notification(
+                user_id=user_id,
+                notification_type='job_created',
+                title='New Job Posted',
+                message=f'Successfully posted job: {job.title}',
+                related_type='job',
+                related_id=job.id,
+                action_url=f'/dashboard/jobs/{job.id}'
+            )
+        except Exception as e:
+            logger.error(f"Failed to create notification: {str(e)}")
+        
         return jsonify({
             'message': 'Job created successfully',
             'job': job.to_dict()
@@ -58,9 +172,19 @@ def create_job():
 @jwt_required()
 def get_jobs():
     try:
-        user_id = get_jwt_identity()
-        
+        user_id = int(get_jwt_identity())  # Convert to int for DB queries
         status = request.args.get('status')
+        
+        # Create cache key based on filters
+        cache_key = f"jobs_list:{user_id}:{status or 'all'}"
+        
+        # Try to get from cache
+        cached_data = cache_get(cache_key)
+        if cached_data:
+            return jsonify({
+                'jobs': cached_data,
+                'cached': True
+            }), 200
         
         query = Job.query.filter_by(user_id=user_id)
         
@@ -68,35 +192,70 @@ def get_jobs():
             query = query.filter_by(status=status)
         
         jobs = query.order_by(Job.created_at.desc()).all()
+        jobs_data = [job.to_dict() for job in jobs]
+        
+        # Cache for 3 minutes
+        cache_set(cache_key, jobs_data, expire=180)
         
         return jsonify({
-            'jobs': [job.to_dict() for job in jobs]
+            'jobs': jobs_data,
+            'cached': False
         }), 200
         
     except Exception as e:
+        logger.error(f"Get jobs error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @jobs_bp.route('/<int:job_id>', methods=['GET'])
 @jwt_required()
 def get_job(job_id):
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert to int for DB queries
+        
+        # Cache key for individual job
+        cache_key = f"job_detail:{user_id}:{job_id}"
+        
+        # Try to get from cache
+        cached_data = cache_get(cache_key)
+        if cached_data:
+            return jsonify({
+                'job': cached_data,
+                'cached': True
+            }), 200
         
         job = Job.query.filter_by(id=job_id, user_id=user_id).first()
         
         if not job:
             return jsonify({'error': 'Job not found'}), 404
         
-        return jsonify({'job': job.to_dict(include_resumes=True)}), 200
+        job_data = job.to_dict(include_resumes=False)
+        
+        # Calculate counts separately
+        candidates_count = Resume.query.filter_by(job_id=job_id).count()
+        shortlisted_count = Resume.query.filter_by(job_id=job_id, status='shortlisted').count()
+        rejected_count = Resume.query.filter_by(job_id=job_id, status='rejected').count()
+        
+        job_data['candidates_count'] = candidates_count
+        job_data['shortlisted_count'] = shortlisted_count
+        job_data['rejected_count'] = rejected_count
+        
+        # Cache for 2 minutes
+        cache_set(cache_key, job_data, expire=120)
+        
+        return jsonify({
+            'job': job_data,
+            'cached': False
+        }), 200
         
     except Exception as e:
+        logger.error(f"Get job error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @jobs_bp.route('/<int:job_id>', methods=['PUT'])
 @jwt_required()
 def update_job(job_id):
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert to int for DB queries
         
         job = Job.query.filter_by(id=job_id, user_id=user_id).first()
         
@@ -128,6 +287,14 @@ def update_job(job_id):
         
         db.session.commit()
         
+        # Invalidate cache
+        cache_delete(f"job_detail:{user_id}:{job_id}")
+        cache_delete_pattern(f"jobs_list:{user_id}:*")
+        cache_delete_pattern(f"dashboard_*:{user_id}")
+        # Invalidate public cache when job is updated
+        cache_delete('jobs_public_active')
+        cache_delete(f'job_public_detail:{job_id}')
+        
         return jsonify({
             'message': 'Job updated successfully',
             'job': job.to_dict()
@@ -141,7 +308,7 @@ def update_job(job_id):
 @jwt_required()
 def delete_job(job_id):
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert to int for DB queries
         
         job = Job.query.filter_by(id=job_id, user_id=user_id).first()
         
@@ -150,6 +317,14 @@ def delete_job(job_id):
         
         db.session.delete(job)
         db.session.commit()
+        
+        # Invalidate cache
+        cache_delete(f"job_detail:{user_id}:{job_id}")
+        cache_delete_pattern(f"jobs_list:{user_id}:*")
+        cache_delete_pattern(f"dashboard_*:{user_id}")
+        # Invalidate public cache when job is deleted
+        cache_delete('jobs_public_active')
+        cache_delete(f'job_public_detail:{job_id}')
         
         return jsonify({'message': 'Job deleted successfully'}), 200
         

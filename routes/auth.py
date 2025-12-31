@@ -2,9 +2,10 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from models.user import User, UserSession
 from models.audit_log import AuditLog
-from extensions import db
+from extensions import db, cache_delete
 from utils.validators import validate_email, validate_password
 from services.supabase_client import get_supabase_auth
+from services.email_service import EmailService
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash
 import secrets
@@ -12,12 +13,16 @@ import json
 
 auth_bp = Blueprint('auth', __name__)
 
-# Import rate limiter if available (graceful degradation)
+# Rate limiter fallback
 try:
     import sys
-    sys.path.insert(0, '/middleware')
-    from middleware.rate_limiter import rate_limit
-except ImportError:
+    import os
+    # Add middleware to path
+    middleware_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'Hirelens_monitoring')
+    if os.path.exists(middleware_path):
+        sys.path.insert(0, middleware_path)
+    from middleware.rate_limiter import rate_limit  # type: ignore
+except (ImportError, ModuleNotFoundError):
     # Fallback: no-op decorator if rate_limiter not available
     def rate_limit(limit=None, window=None):
         def decorator(f):
@@ -63,9 +68,9 @@ def signup():
         db.session.add(user)
         db.session.commit()
         
-        # Create tokens
-        access_token = create_access_token(identity=user.id)
-        refresh_token = create_refresh_token(identity=user.id)
+        # Create tokens (identity must be string)
+        access_token = create_access_token(identity=str(user.id))
+        refresh_token = create_refresh_token(identity=str(user.id))
         
         # Store HASHED refresh token in user record (security improvement)
         user.refresh_token = hash_token(refresh_token)
@@ -87,6 +92,40 @@ def signup():
         # Log successful signup
         AuditLog.log_event(user.id, 'signup', 'success', request, 
                           json.dumps({'email': email, 'name': name}))
+        
+        # Send welcome email (async, don't block signup if it fails)
+        try:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Sending welcome email to new signup: {email}")
+            
+            email_service = EmailService()
+            email_service.send_welcome_email(
+                user_name=name or email.split('@')[0],
+                user_email=email,
+                company_name=company
+            )
+            
+            logger.info(f"Welcome email sent successfully to {email}")
+            
+            # Create welcome notification
+            try:
+                from routes.notifications import create_notification
+                create_notification(
+                    user_id=user.id,
+                    notification_type='welcome',
+                    title='Welcome to HireLens! 🎉',
+                    message='Your account has been created successfully. Start by posting your first job!',
+                    related_type='user',
+                    related_id=user.id,
+                    action_url='/dashboard/jobs/create'
+                )
+            except Exception as notif_error:
+                logger.error(f"Failed to create welcome notification: {str(notif_error)}")
+                
+        except Exception as e:
+            # Log the error but don't fail the signup
+            logger.error(f"Failed to send welcome email to {email}: {str(e)}")
         
         return jsonify({
             'message': 'User created successfully',
@@ -119,7 +158,6 @@ def login():
         
         # Check if account is locked
         if user and user.is_locked():
-            from datetime import datetime
             remaining_time = int((user.locked_until - datetime.utcnow()).total_seconds() / 60)
             return jsonify({
                 'error': f'Account locked due to multiple failed login attempts. Try again in {remaining_time} minutes.'
@@ -145,9 +183,9 @@ def login():
         # Reset failed login attempts on successful login
         user.reset_failed_login()
         
-        # Create tokens
-        access_token = create_access_token(identity=user.id)
-        refresh_token = create_refresh_token(identity=user.id)
+        # Create tokens (identity must be string)
+        access_token = create_access_token(identity=str(user.id))
+        refresh_token = create_refresh_token(identity=str(user.id))
         
         # Update user login info with HASHED refresh token (security improvement)
         user.refresh_token = hash_token(refresh_token)
@@ -196,15 +234,29 @@ def login():
 @jwt_required()
 def get_current_user():
     try:
-        user_id = get_jwt_identity()
+        # Add detailed logging
+        from flask import current_app
+        current_app.logger.info('=== /me endpoint called ===')
+        current_app.logger.info(f'Headers: {dict(request.headers)}')
+        
+        user_id = int(get_jwt_identity())  # Convert string back to int
+        current_app.logger.info(f'JWT Identity: {user_id}')
+        
         user = User.query.get(user_id)
         
         if not user:
+            current_app.logger.error(f'User not found for ID: {user_id}')
             return jsonify({'error': 'User not found'}), 404
         
+        current_app.logger.info(f'User found: {user.email}')
         return jsonify({'user': user.to_dict()}), 200
         
     except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f'Error in /me endpoint: {str(e)}')
+        current_app.logger.error(f'Error type: {type(e).__name__}')
+        import traceback
+        current_app.logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 @auth_bp.route('/refresh', methods=['POST'])
@@ -223,7 +275,7 @@ def refresh():
 @jwt_required()
 def logout():
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string back to int
         
         # Revoke all active sessions for the user
         UserSession.query.filter_by(user_id=user_id, is_active=True).update({'is_active': False})
@@ -235,8 +287,10 @@ def logout():
             user.token_expires_at = None
         
         db.session.commit()
-        
-        # Log logout
+                # Invalidate all user caches
+        cache_delete(f"user_profile:{user_id}")
+        cache_delete(f"user_plan:{user_id}")
+                # Log logout
         AuditLog.log_event(user_id, 'logout', 'success', request, None)
         
         return jsonify({'message': 'Logged out successfully'}), 200
@@ -249,7 +303,7 @@ def logout():
 @jwt_required()
 def get_sessions():
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string back to int
         
         sessions = UserSession.query.filter_by(user_id=user_id).order_by(UserSession.created_at.desc()).all()
         
@@ -264,7 +318,7 @@ def get_sessions():
 @jwt_required()
 def revoke_session(session_id):
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())  # Convert string back to int
         
         session = UserSession.query.filter_by(id=session_id, user_id=user_id).first()
         
@@ -354,8 +408,13 @@ def oauth_callback():
         # Check if user exists
         user = User.query.filter_by(email=email).first()
         
+        is_new_user = False
         if not user:
             # Create new user from OAuth
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Creating new user from {provider} OAuth: {email}")
+            
             user = User(
                 email=email,
                 name=name or email.split('@')[0],
@@ -367,10 +426,13 @@ def oauth_callback():
             
             db.session.add(user)
             db.session.commit()
+            is_new_user = True
+            
+            logger.info(f"New user created successfully: ID={user.id}, Email={email}")
         
-        # Create JWT tokens
-        access_token = create_access_token(identity=user.id)
-        refresh_token = create_refresh_token(identity=user.id)
+        # Create JWT tokens (identity must be string)
+        access_token = create_access_token(identity=str(user.id))
+        refresh_token = create_refresh_token(identity=str(user.id))
         
         # Update user login info with HASHED refresh token
         user.refresh_token = hash_token(refresh_token)
@@ -394,6 +456,40 @@ def oauth_callback():
         )
         db.session.add(session)
         db.session.commit()
+        
+        # Send welcome email and create notification for new OAuth users (first time only)
+        if is_new_user:
+            try:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Sending welcome email to new {provider} user: {email}")
+                
+                email_service = EmailService()
+                email_service.send_welcome_email(
+                    user_name=user.name or email.split('@')[0],
+                    user_email=email,
+                    company_name=user.company
+                )
+                
+                logger.info(f"Welcome email sent successfully to {email}")
+                
+                # Create welcome notification
+                try:
+                    from routes.notifications import create_notification
+                    create_notification(
+                        user_id=user.id,
+                        notification_type='welcome',
+                        title=f'Welcome to HireLens! 🎉',
+                        message=f'Your account has been created successfully via {provider.capitalize()}. Start by posting your first job!',
+                        related_type='user',
+                        related_id=user.id,
+                        action_url='/dashboard/jobs/create'
+                    )
+                except Exception as notif_error:
+                    logger.error(f"Failed to create welcome notification: {str(notif_error)}")
+                    
+            except Exception as e:
+                logger.error(f"Failed to send welcome email to {email}: {str(e)}")
         
         return jsonify({
             'message': f'{provider.capitalize()} login successful',

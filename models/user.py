@@ -11,6 +11,8 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(100))
     company = db.Column(db.String(100))
+    phone = db.Column(db.String(20))
+    profile_image = db.Column(db.String(500))
     role = db.Column(db.String(20), default='recruiter')  # recruiter, admin
     plan = db.Column(db.String(20), default='starter')  # starter, pro, enterprise
     jobs_used = db.Column(db.Integer, default=0)
@@ -26,6 +28,16 @@ class User(db.Model):
     # Account security fields (lockout mechanism)
     failed_login_attempts = db.Column(db.Integer, default=0)
     locked_until = db.Column(db.DateTime, nullable=True)
+    
+    # Email configuration fields
+    email_notifications = db.Column(db.Boolean, default=False)
+    smtp_configured = db.Column(db.Boolean, default=False)
+    smtp_server = db.Column(db.String(255))
+    smtp_port = db.Column(db.Integer)
+    smtp_username = db.Column(db.String(255))
+    smtp_password = db.Column(db.String(255))
+    from_email = db.Column(db.String(255))
+    from_name = db.Column(db.String(255))
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -70,7 +82,7 @@ class User(db.Model):
             'id': self.id,
             'email': self.email,
             'name': self.name,
-            'company': self.company,
+            'company': self.company,            'phone': self.phone,            'profile_image': self.profile_image,
             'role': self.role,
             'plan': self.plan,
             'jobs_used': self.jobs_used,

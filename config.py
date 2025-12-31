@@ -6,10 +6,46 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///hirelens.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
+    # MySQL Connection Pool Settings (Fix "Lost connection" errors)
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_size': 10,
+        'pool_recycle': 3600,  # Recycle connections after 1 hour
+        'pool_pre_ping': True,  # Verify connections before using
+        'max_overflow': 20,
+        'pool_timeout': 30,
+        'echo': False
+    }
+    
+    # Redis Configuration
+    REDIS_HOST = os.getenv('REDIS_HOST', 'redis')
+    REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
+    REDIS_DB = int(os.getenv('REDIS_DB', 0))
+    CACHE_TTL = 300  # 5 minutes default cache
+    
+    # Email Configuration
+    MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
+    MAIL_PORT = int(os.getenv('MAIL_PORT', 587))
+    MAIL_USE_TLS = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
+    MAIL_USERNAME = os.getenv('MAIL_USERNAME', '')
+    MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', '')
+    MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', 'noreply@hirelens.ai')
+    CONTACT_EMAIL = 'nikhilsangale121@gmail.com'
+    
+    # SMTP for EmailService
+    SMTP_SERVER = os.getenv('SMTP_SERVER', os.getenv('MAIL_SERVER', 'smtp.gmail.com'))
+    SMTP_PORT = int(os.getenv('SMTP_PORT', os.getenv('MAIL_PORT', 587)))
+    SMTP_USERNAME = os.getenv('SMTP_USERNAME', os.getenv('MAIL_USERNAME', ''))
+    SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', os.getenv('MAIL_PASSWORD', ''))
+    FROM_EMAIL = os.getenv('FROM_EMAIL', os.getenv('MAIL_DEFAULT_SENDER', 'noreply@hirelens.ai'))
+    FROM_NAME = os.getenv('FROM_NAME', 'HireLens Recruitment')
+    
     # JWT - Hybrid Security Approach
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=30)  # Short-lived for speed
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=30)  # Long-lived session
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)    # Long-lived in DB for security
+    JWT_TOKEN_LOCATION = ['headers']
+    JWT_HEADER_NAME = 'Authorization'
+    JWT_HEADER_TYPE = 'Bearer'
     
     # File Upload
     UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')

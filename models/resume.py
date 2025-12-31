@@ -27,12 +27,13 @@ class Resume(db.Model):
     # Status
     status = db.Column(db.String(20), default='new')  # new, shortlisted, rejected
     processing_status = db.Column(db.String(20), default='pending')  # pending, processing, completed, failed
+    processing_time_seconds = db.Column(db.Float, default=0.0)  # Time taken to process
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    def to_dict(self):
-        return {
+    def to_dict(self, include_job=False):
+        data = {
             'id': self.id,
             'job_id': self.job_id,
             'filename': self.filename,
@@ -49,3 +50,10 @@ class Resume(db.Model):
             'processing_status': self.processing_status,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+        
+        if include_job and self.job:
+            data['job_title'] = self.job.title
+            data['job_department'] = self.job.department
+            data['job_location'] = self.job.location
+        
+        return data

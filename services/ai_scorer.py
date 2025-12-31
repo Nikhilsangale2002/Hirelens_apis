@@ -22,25 +22,78 @@ class AIScorer:
             return self._rule_based_score(parsed_data, job)
     
     def _rule_based_score(self, parsed_data: Dict, job) -> Dict:
-        """Rule-based scoring (fallback when AI not available)"""
+        """Rule-based scoring with intelligent skill matching"""
         
         score = 0.0
         matched_skills = []
         missing_skills = []
         
-        candidate_skills = [s.lower() for s in (parsed_data.get('skills') or [])]
-        required_skills = [s.lower() for s in (job.skills_required or [])]
+        candidate_skills = [s.lower().strip() for s in (parsed_data.get('skills') or [])]
+        required_skills_orig = job.skills_required or []
+        
+        # Skill synonyms for better matching
+        skill_synonyms = {
+            'javascript': ['js', 'javascript', 'ecmascript'],
+            'typescript': ['ts', 'typescript'],
+            'python': ['py', 'python'],
+            'rest api': ['rest', 'restful', 'rest api', 'restful api', 'rest apis'],
+            'mysql': ['mysql', 'my sql'],
+            'postgresql': ['postgres', 'postgresql', 'psql'],
+            'mongodb': ['mongo', 'mongodb'],
+            'node.js': ['node', 'nodejs', 'node.js'],
+            'react': ['react', 'reactjs', 'react.js'],
+            'angular': ['angular', 'angularjs'],
+            'vue': ['vue', 'vuejs', 'vue.js'],
+            'machine learning': ['ml', 'machine learning', 'ai', 'artificial intelligence'],
+            'docker': ['docker', 'containerization'],
+            'kubernetes': ['k8s', 'kubernetes'],
+            'flask': ['flask'],
+            'django': ['django'],
+            'spring': ['spring', 'spring boot', 'springboot'],
+            'aws': ['aws', 'amazon web services'],
+            'azure': ['azure', 'microsoft azure'],
+            'gcp': ['gcp', 'google cloud'],
+        }
         
         # Skills match (50% weight)
-        if required_skills:
-            for skill in required_skills:
-                if any(skill in cs for cs in candidate_skills):
-                    matched_skills.append(skill)
-                else:
-                    missing_skills.append(skill)
+        if required_skills_orig:
+            for req_skill in required_skills_orig:
+                req_skill_lower = req_skill.lower().strip()
+                matched = False
+                
+                # Get synonyms for this required skill
+                synonyms = skill_synonyms.get(req_skill_lower, [req_skill_lower])
+                
+                # Check if any candidate skill matches any synonym
+                for cand_skill in candidate_skills:
+                    # Direct match
+                    if cand_skill == req_skill_lower:
+                        matched_skills.append(req_skill)
+                        matched = True
+                        break
+                    
+                    # Synonym match
+                    for synonym in synonyms:
+                        if synonym in cand_skill or cand_skill in synonym:
+                            matched_skills.append(req_skill)
+                            matched = True
+                            break
+                    
+                    if matched:
+                        break
+                
+                if not matched:
+                    missing_skills.append(req_skill)
             
-            skills_score = (len(matched_skills) / len(required_skills)) * 50
+            skills_score = (len(matched_skills) / len(required_skills_orig)) * 50
             score += skills_score
+            
+            # Debug logging
+            print(f"DEBUG: Required skills: {required_skills_orig}")
+            print(f"DEBUG: Candidate skills: {candidate_skills}")
+            print(f"DEBUG: Matched skills: {matched_skills}")
+            print(f"DEBUG: Missing skills: {missing_skills}")
+            print(f"DEBUG: Skills score: {skills_score}/50")
         else:
             score += 50  # If no required skills, give full score
         
@@ -69,7 +122,7 @@ class AIScorer:
         if parsed_data.get('projects') or parsed_data.get('certifications'):
             score += 10
         
-        explanation = f"Matched {len(matched_skills)}/{len(required_skills)} required skills. "
+        explanation = f"Matched {len(matched_skills)}/{len(required_skills_orig)} required skills. "
         explanation += f"{candidate_exp} years experience. "
         explanation += f"Education: {parsed_data.get('education_level', 'Unknown')}."
         

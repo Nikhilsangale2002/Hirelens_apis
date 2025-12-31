@@ -79,23 +79,121 @@ class ResumeParser:
         return None
     
     def _extract_skills(self, text: str) -> List[str]:
-        """Extract skills"""
-        # Common skill keywords
-        common_skills = [
-            'python', 'java', 'javascript', 'react', 'node', 'angular', 'vue',
-            'sql', 'mongodb', 'aws', 'docker', 'kubernetes', 'git', 'agile',
-            'machine learning', 'data science', 'tensorflow', 'pytorch',
-            'html', 'css', 'typescript', 'c++', 'c#', 'php', 'ruby', 'golang'
-        ]
+        """Extract skills with comprehensive matching"""
+        # Expanded skill database with variations and synonyms
+        skill_patterns = {
+            # Programming Languages
+            'Python': ['python', 'py'],
+            'Java': ['java'],
+            'JavaScript': ['javascript', 'js', 'ecmascript'],
+            'TypeScript': ['typescript', 'ts'],
+            'C++': ['c++', 'cpp', 'cplusplus'],
+            'C#': ['c#', 'csharp', 'c sharp'],
+            'PHP': ['php'],
+            'Ruby': ['ruby', 'rails'],
+            'Go': ['golang', 'go'],
+            'Rust': ['rust'],
+            'Swift': ['swift'],
+            'Kotlin': ['kotlin'],
+            'Scala': ['scala'],
+            'R': ['\br\b'],
+            
+            # Web Technologies
+            'React': ['react', 'reactjs', 'react.js'],
+            'Angular': ['angular', 'angularjs'],
+            'Vue': ['vue', 'vuejs', 'vue.js'],
+            'Next.js': ['next.js', 'nextjs', 'next'],
+            'Node.js': ['node', 'nodejs', 'node.js'],
+            'Express': ['express', 'expressjs', 'express.js'],
+            'Django': ['django'],
+            'Flask': ['flask'],
+            'FastAPI': ['fastapi', 'fast api'],
+            'Spring': ['spring', 'spring boot', 'springboot'],
+            'ASP.NET': ['asp.net', 'aspnet', 'asp net'],
+            'HTML': ['html', 'html5'],
+            'CSS': ['css', 'css3'],
+            'Tailwind': ['tailwind', 'tailwindcss'],
+            'Bootstrap': ['bootstrap'],
+            'jQuery': ['jquery'],
+            
+            # Databases
+            'MySQL': ['mysql', 'my sql'],
+            'PostgreSQL': ['postgresql', 'postgres', 'psql'],
+            'MongoDB': ['mongodb', 'mongo'],
+            'Redis': ['redis'],
+            'Oracle': ['oracle', 'oracle db'],
+            'SQL Server': ['sql server', 'mssql', 'ms sql'],
+            'SQLite': ['sqlite'],
+            'Cassandra': ['cassandra'],
+            'Elasticsearch': ['elasticsearch', 'elastic search', 'elastic'],
+            'DynamoDB': ['dynamodb', 'dynamo'],
+            
+            # Cloud & DevOps
+            'AWS': ['aws', 'amazon web services'],
+            'Azure': ['azure', 'microsoft azure'],
+            'GCP': ['gcp', 'google cloud', 'google cloud platform'],
+            'Docker': ['docker', 'containerization'],
+            'Kubernetes': ['kubernetes', 'k8s'],
+            'Jenkins': ['jenkins'],
+            'CI/CD': ['ci/cd', 'cicd', 'continuous integration', 'continuous deployment'],
+            'Terraform': ['terraform'],
+            'Ansible': ['ansible'],
+            'Git': ['git', 'github', 'gitlab', 'bitbucket'],
+            'Linux': ['linux', 'unix'],
+            
+            # API & Architecture
+            'REST API': ['rest', 'rest api', 'restful', 'restful api', 'rest apis'],
+            'GraphQL': ['graphql', 'graph ql'],
+            'Microservices': ['microservices', 'micro services', 'microservice'],
+            'SOAP': ['soap'],
+            'gRPC': ['grpc'],
+            
+            # Data Science & ML
+            'Machine Learning': ['machine learning', 'ml', 'artificial intelligence', 'ai'],
+            'Deep Learning': ['deep learning', 'neural network', 'neural networks'],
+            'TensorFlow': ['tensorflow', 'tensor flow'],
+            'PyTorch': ['pytorch', 'torch'],
+            'Scikit-learn': ['scikit-learn', 'sklearn', 'scikit learn'],
+            'Pandas': ['pandas'],
+            'NumPy': ['numpy', 'np'],
+            'Keras': ['keras'],
+            'NLP': ['nlp', 'natural language processing'],
+            'Computer Vision': ['computer vision', 'cv', 'image processing'],
+            
+            # Testing
+            'Jest': ['jest'],
+            'Pytest': ['pytest', 'py.test'],
+            'JUnit': ['junit'],
+            'Selenium': ['selenium'],
+            'Cypress': ['cypress'],
+            'Mocha': ['mocha'],
+            
+            # Methodologies
+            'Agile': ['agile', 'scrum', 'kanban'],
+            'JIRA': ['jira'],
+            'Postman': ['postman'],
+        }
         
         text_lower = text.lower()
-        found_skills = []
+        found_skills = set()  # Use set to avoid duplicates
         
-        for skill in common_skills:
-            if skill in text_lower:
-                found_skills.append(skill.title())
+        for skill_name, patterns in skill_patterns.items():
+            for pattern in patterns:
+                # Use word boundaries for better matching
+                if pattern.startswith('\\b'):
+                    # Already has word boundary
+                    if re.search(pattern, text_lower):
+                        found_skills.add(skill_name)
+                        break
+                else:
+                    # Add word boundaries or check if pattern exists
+                    if re.search(r'\b' + re.escape(pattern) + r'\b', text_lower):
+                        found_skills.add(skill_name)
+                        break
         
-        return found_skills
+        result = sorted(list(found_skills))
+        print(f"DEBUG: Extracted {len(result)} skills from resume: {result}")
+        return result
     
     def _extract_experience_years(self, text: str) -> float:
         """Extract years of experience"""

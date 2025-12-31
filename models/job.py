@@ -37,9 +37,6 @@ class Job(db.Model):
             'salary_range': self.salary_range,
             'status': self.status,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'candidates_count': self.resumes.count(),
-            'shortlisted_count': self.resumes.filter_by(status='shortlisted').count(),
-            'rejected_count': self.resumes.filter_by(status='rejected').count()
         }
         
         if include_resumes:
