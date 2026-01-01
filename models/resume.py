@@ -3,21 +3,27 @@ from datetime import datetime
 
 class Resume(db.Model):
     __tablename__ = 'resumes'
+    __table_args__ = (
+        db.Index('idx_job_status', 'job_id', 'status'),  # For filtering candidates by status
+        db.Index('idx_job_score', 'job_id', 'ai_score'),  # For sorting by AI score
+        db.Index('idx_email', 'email'),  # For searching by email
+        db.Index('idx_processing', 'processing_status'),  # For tracking processing
+    )
     
     id = db.Column(db.Integer, primary_key=True)
-    job_id = db.Column(db.Integer, db.ForeignKey('jobs.id'), nullable=False)
+    job_id = db.Column(db.Integer, db.ForeignKey('jobs.id'), nullable=False, index=True)
     filename = db.Column(db.String(255), nullable=False)
     file_path = db.Column(db.String(500))
     
     # Parsed Data
-    candidate_name = db.Column(db.String(200))
+    candidate_name = db.Column(db.String(200), index=True)
     email = db.Column(db.String(120))
     phone = db.Column(db.String(20))
     location = db.Column(db.String(100))
     parsed_data = db.Column(db.JSON)  # Full parsed resume data
     
     # AI Scoring
-    ai_score = db.Column(db.Float, default=0.0)  # 0-100
+    ai_score = db.Column(db.Float, default=0.0, index=True)  # 0-100
     matched_skills = db.Column(db.JSON)  # Skills that match JD
     missing_skills = db.Column(db.JSON)  # Skills missing from JD
     experience_years = db.Column(db.Float)
@@ -25,11 +31,11 @@ class Resume(db.Model):
     ai_explanation = db.Column(db.Text)  # Why this score
     
     # Status
-    status = db.Column(db.String(20), default='new')  # new, shortlisted, rejected
+    status = db.Column(db.String(20), default='new', index=True)  # new, shortlisted, rejected
     processing_status = db.Column(db.String(20), default='pending')  # pending, processing, completed, failed
     processing_time_seconds = db.Column(db.Float, default=0.0)  # Time taken to process
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     def to_dict(self, include_job=False):

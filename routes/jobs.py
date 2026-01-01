@@ -6,6 +6,7 @@ from models.resume import Resume
 from extensions import db, cache_get, cache_set, cache_delete, cache_delete_pattern
 from routes.notifications import create_notification
 from config import Config
+from utils.pagination import paginate, paginate_response
 import logging
 
 jobs_bp = Blueprint('jobs', __name__)
@@ -171,36 +172,47 @@ def create_job():
 @jobs_bp.route('/', methods=['GET'])
 @jwt_required()
 def get_jobs():
+    """Get paginated list of user's jobs"""
     try:
-        user_id = int(get_jwt_identity())  # Convert to int for DB queries
+        user_id = int(get_jwt_identity())
         status = request.args.get('status')
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
         
         # Create cache key based on filters
-        cache_key = f"jobs_list:{user_id}:{status or 'all'}"
+        cache_key = f"jobs_list:{user_id}:{status or 'all'}:p{page}:pp{per_page}"
         
         # Try to get from cache
         cached_data = cache_get(cache_key)
         if cached_data:
-            return jsonify({
-                'jobs': cached_data,
-                'cached': True
-            }), 200
+            return jsonify({**cached_data, 'cached': True}), 200
         
+        # Build query
         query = Job.query.filter_by(user_id=user_id)
         
         if status:
             query = query.filter_by(status=status)
         
-        jobs = query.order_by(Job.created_at.desc()).all()
-        jobs_data = [job.to_dict() for job in jobs]
+        query = query.order_by(Job.created_at.desc())
         
-        # Cache for 3 minutes
-        cache_set(cache_key, jobs_data, expire=180)
+        # Paginate
+        paginated = paginate(query, page=page, per_page=per_page)
+        response_data = paginate_response(paginated)
         
-        return jsonify({
-            'jobs': jobs_data,
+        # Restructure response to match frontend expectations (jobs instead of data)
+        frontend_response = {
+            'jobs': response_data['data'],
+            'pagination': response_data['pagination'],
             'cached': False
-        }), 200
+        }
+        
+        # Cache for 3 minutes (cache without the 'cached' flag)
+        cache_set(cache_key, {
+            'jobs': response_data['data'],
+            'pagination': response_data['pagination']
+        }, expire=180)
+        
+        return jsonify(frontend_response), 200
         
     except Exception as e:
         logger.error(f"Get jobs error: {str(e)}")
@@ -228,17 +240,8 @@ def get_job(job_id):
         if not job:
             return jsonify({'error': 'Job not found'}), 404
         
-        job_data = job.to_dict(include_resumes=False)
-        
-        # Calculate counts using .all() instead of .count()
-        all_candidates = Resume.query.filter_by(job_id=job_id).all()
-        candidates_count = len(all_candidates)
-        shortlisted_count = len([c for c in all_candidates if c.status == 'shortlisted'])
-        rejected_count = len([c for c in all_candidates if c.status == 'rejected'])
-        
-        job_data['candidates_count'] = candidates_count
-        job_data['shortlisted_count'] = shortlisted_count
-        job_data['rejected_count'] = rejected_count
+        # to_dict will calculate counts internally
+        job_data = job.to_dict(include_resumes=False, include_counts=True)
         
         # Cache for 2 minutes
         cache_set(cache_key, job_data, expire=120)

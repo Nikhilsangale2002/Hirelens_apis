@@ -6,6 +6,7 @@ from models.user import User
 from extensions import db, cache_get, cache_set, cache_delete, cache_delete_pattern
 from services.email_service import EmailService
 from routes.notifications import create_notification
+from utils.pagination import paginate, paginate_response
 import logging
 import os
 
@@ -15,31 +16,23 @@ logger = logging.getLogger(__name__)
 @candidates_bp.route('/job/<int:job_id>', methods=['GET'])
 @jwt_required()
 def get_candidates(job_id):
+    """Get paginated candidates for a specific job"""
     try:
-        user_id = int(get_jwt_identity())  # Convert to int for DB queries
+        user_id = int(get_jwt_identity())
         
         # Query parameters
         status = request.args.get('status')
         min_score = request.args.get('min_score', type=float)
         sort_by = request.args.get('sort_by', 'score')  # score, date
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
         
-        # Create cache key
-        cache_key = f"candidates_job:{user_id}:{job_id}:{status or 'all'}:{min_score or 0}:{sort_by}"
-        
-        # Try to get from cache
-        cached_data = cache_get(cache_key)
-        if cached_data:
-            return jsonify({
-                'candidates': cached_data['candidates'],
-                'total': cached_data['total'],
-                'cached': True
-            }), 200
-        
+        # Verify job ownership
         job = Job.query.filter_by(id=job_id, user_id=user_id).first()
-        
         if not job:
             return jsonify({'error': 'Job not found'}), 404
         
+        # Build query with optimizations
         query = Resume.query.filter_by(job_id=job_id)
         
         if status:
@@ -54,21 +47,17 @@ def get_candidates(job_id):
         else:
             query = query.order_by(Resume.created_at.desc())
         
-        candidates = query.all()
-        candidates_data = [c.to_dict() for c in candidates]
+        # Paginate
+        paginated = paginate(query, page=page, per_page=per_page, max_per_page=100)
+        response_data = paginate_response(paginated)
         
-        result = {
-            'candidates': candidates_data,
-            'total': len(candidates_data)
+        # Restructure response to match frontend expectations (candidates instead of data)
+        frontend_response = {
+            'candidates': response_data['data'],
+            'pagination': response_data['pagination']
         }
         
-        # Cache for 2 minutes
-        cache_set(cache_key, result, expire=120)
-        
-        return jsonify({
-            **result,
-            'cached': False
-        }), 200
+        return jsonify(frontend_response), 200
         
     except Exception as e:
         logger.error(f"Get candidates error: {str(e)}")
@@ -306,8 +295,8 @@ def download_resume(candidate_id):
         
         return send_file(
             candidate.file_path,
-            as_attachment=True,
-            download_name=f"{candidate.candidate_name or 'resume'}_{candidate.filename}"
+            as_attachment=False,  # Open in browser instead of downloading
+            mimetype='application/pdf'
         )
         
     except Exception as e:

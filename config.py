@@ -1,5 +1,12 @@
 import os
 from datetime import timedelta
+from typing import Dict, Any
+
+
+class ConfigValidationError(Exception):
+    """Raised when critical configuration is missing or invalid"""
+    pass
+
 
 class Config:
     # Database
@@ -83,6 +90,45 @@ class Config:
             'price': 0  # custom pricing
         }
     }
+    
+    @classmethod
+    def validate(cls) -> None:
+        """
+        Validate critical configuration values.
+        Raises ConfigValidationError if any required config is missing.
+        """
+        errors = []
+        
+        # Critical: JWT Secret Key
+        if cls.JWT_SECRET_KEY == 'your-secret-key-change-in-production':
+            errors.append("JWT_SECRET_KEY must be changed from default value in production")
+        
+        # Critical: Database URL
+        if not os.getenv('DATABASE_URL') and cls.SQLALCHEMY_DATABASE_URI == 'sqlite:///hirelens.db':
+            errors.append("DATABASE_URL environment variable not set (using SQLite fallback)")
+        
+        # Warning: AI Configuration
+        if not cls.GEMINI_API_KEY and not cls.OPENAI_API_KEY:
+            errors.append("No AI API keys configured (GEMINI_API_KEY or OPENAI_API_KEY)")
+        
+        # Warning: Email Configuration
+        if not cls.MAIL_USERNAME or not cls.MAIL_PASSWORD:
+            errors.append("Email not configured (MAIL_USERNAME or MAIL_PASSWORD missing)")
+        
+        # Warning: Supabase OAuth
+        if not cls.SUPABASE_URL or not cls.SUPABASE_ANON_KEY:
+            errors.append("Supabase OAuth not configured (SUPABASE_URL or SUPABASE_ANON_KEY missing)")
+        
+        if errors:
+            error_msg = "Configuration validation warnings:\n" + "\n".join(f"  - {e}" for e in errors)
+            print(f"\n{'='*60}\n{error_msg}\n{'='*60}\n")
+            
+            # Only raise in production if critical configs are missing
+            if not cls.DEBUG and (
+                cls.JWT_SECRET_KEY == 'your-secret-key-change-in-production' or
+                not os.getenv('DATABASE_URL')
+            ):
+                raise ConfigValidationError("Critical configuration missing for production deployment")
 
 class DevelopmentConfig(Config):
     DEBUG = True

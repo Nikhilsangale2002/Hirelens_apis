@@ -3,19 +3,25 @@ from datetime import datetime
 
 class Interview(db.Model):
     __tablename__ = 'interviews'
+    __table_args__ = (
+        db.Index('idx_job_scheduled', 'job_id', 'scheduled_date'),  # For job interview schedule
+        db.Index('idx_resume_date', 'resume_id', 'scheduled_date'),  # For candidate interviews
+        db.Index('idx_status_date', 'status', 'scheduled_date'),  # For filtering by status
+        db.Index('idx_access_code', 'access_code'),  # For quick access code lookup
+    )
     
     id = db.Column(db.Integer, primary_key=True)
-    resume_id = db.Column(db.Integer, db.ForeignKey('resumes.id'), nullable=False)
-    job_id = db.Column(db.Integer, db.ForeignKey('jobs.id'), nullable=False)
+    resume_id = db.Column(db.Integer, db.ForeignKey('resumes.id'), nullable=False, index=True)
+    job_id = db.Column(db.Integer, db.ForeignKey('jobs.id'), nullable=False, index=True)
     interview_type = db.Column(db.String(50), nullable=False, default='screening')  # screening, technical, hr, final
-    scheduled_date = db.Column(db.DateTime, nullable=False)
+    scheduled_date = db.Column(db.DateTime, nullable=False, index=True)
     duration_minutes = db.Column(db.Integer, default=60)
     interview_mode = db.Column(db.String(50), default='video')  # video, phone, in-person, ai
     meeting_link = db.Column(db.String(500))
     location = db.Column(db.String(255))
     interviewer_name = db.Column(db.String(200))
     interviewer_email = db.Column(db.String(200))
-    status = db.Column(db.String(50), default='scheduled')  # scheduled, completed, cancelled, no-show
+    status = db.Column(db.String(50), default='scheduled', index=True)  # scheduled, completed, cancelled, no-show
     notes = db.Column(db.Text)
     feedback = db.Column(db.Text)
     ai_questions = db.Column(db.Text)  # For AI interviews (stored as JSON string)
@@ -27,7 +33,7 @@ class Interview(db.Model):
     interview_status = db.Column(db.String(20))  # pending, in_progress, completed
     completed_at = db.Column(db.DateTime)
     access_code = db.Column(db.String(6))  # 6-character access code for candidate authentication
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     def to_dict(self):

@@ -9,10 +9,10 @@ import google.generativeai as genai
 from typing import List, Dict, Any, Optional
 
 class AIInterviewService:
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize Gemini AI client"""
-        self.api_key = os.getenv('GEMINI_API_KEY')
-        self.model_name = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
+        self.api_key: Optional[str] = os.getenv('GEMINI_API_KEY')
+        self.model_name: str = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
         
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY not found in environment variables")

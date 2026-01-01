@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Request
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from models.user import User, UserSession
 from models.audit_log import AuditLog
@@ -37,6 +37,7 @@ def hash_token(token):
 @auth_bp.route('/signup', methods=['POST'])
 @rate_limit(limit=5, window=300)  # 5 signups per 5 minutes per IP
 def signup():
+    """Register a new user account"""
     try:
         data = request.get_json()
         
@@ -146,6 +147,7 @@ def signup():
 @auth_bp.route('/login', methods=['POST'])
 @rate_limit(limit=5, window=900)  # 5 login attempts per 15 minutes per IP
 def login():
+    """Authenticate user and create session"""
     try:
         data = request.get_json()
         email = data.get('email', '').strip().lower()

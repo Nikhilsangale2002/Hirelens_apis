@@ -5,6 +5,7 @@ from datetime import datetime
 from config import Config
 from models.interview import EmailLog
 from extensions import db
+from typing import Optional, List, Dict, Any, Tuple
 import logging
 
 logger = logging.getLogger(__name__)

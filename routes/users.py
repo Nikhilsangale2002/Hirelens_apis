@@ -260,10 +260,15 @@ def get_plan():
 
 @users_bp.route('/uploads/profiles/<filename>', methods=['GET'])
 def serve_profile_image(filename):
-    """Serve profile images"""
+    """Serve profile images (display inline, not download)"""
     try:
         upload_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'profiles')
-        return send_from_directory(upload_folder, filename)
+        return send_from_directory(
+            upload_folder, 
+            filename,
+            as_attachment=False,  # Display inline instead of downloading
+            mimetype='image/jpeg'  # Set proper image mimetype
+        )
     except Exception as e:
         return jsonify({'error': 'Image not found'}), 404
 

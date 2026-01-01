@@ -2,6 +2,8 @@ from flask import Flask
 from flask_cors import CORS
 from config import Config
 from extensions import db, jwt, init_redis, mail
+from migrate_config import init_migrate
+from utils.monitoring import request_logger_middleware, performance_monitor, error_tracker
 from routes.auth import auth_bp
 from routes.jobs import jobs_bp
 from routes.resumes import resumes_bp
@@ -12,9 +14,33 @@ from routes.users import users_bp
 from routes.contact import contact_bp
 from routes.dashboard import dashboard_bp
 from routes.notifications import notifications_bp
+from werkzeug.exceptions import HTTPException
 import threading
 import time
 import logging
+
+
+class ValidationError(Exception):
+    """Custom exception for validation errors"""
+    status_code = 400
+    
+    def __init__(self, message, status_code=None, payload=None):
+        super().__init__()
+        self.message = message
+        if status_code is not None:
+            self.status_code = status_code
+        self.payload = payload
+    
+    def to_dict(self):
+        rv = dict(self.payload or ())
+        rv['error'] = self.message
+        return rv
+
+
+class DatabaseError(Exception):
+    """Custom exception for database errors"""
+    status_code = 500
+
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -29,6 +55,10 @@ def create_app(config_class=Config):
     jwt.init_app(app)
     init_redis(app)  # Initialize Redis
     mail.init_app(app)  # Initialize Mail
+    init_migrate(app)  # Initialize Flask-Migrate
+    
+    # Initialize monitoring middleware
+    request_logger_middleware(app)
     
     # JWT error handlers with detailed logging
     @jwt.expired_token_loader
@@ -77,9 +107,70 @@ def create_app(config_class=Config):
     app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
     
+    # Centralized error handlers
+    @app.errorhandler(ValidationError)
+    def handle_validation_error(e):
+        """Handle custom validation errors"""
+        response = e.to_dict()
+        return response, e.status_code
+    
+    @app.errorhandler(DatabaseError)
+    def handle_database_error(e):
+        """Handle database errors"""
+        app.logger.error(f'Database error: {str(e)}')
+        return {'error': 'Database operation failed', 'details': str(e)}, 500
+    
+    @app.errorhandler(404)
+    def handle_not_found(e):
+        """Handle 404 errors"""
+        return {'error': 'Resource not found', 'path': str(e)}, 404
+    
+    @app.errorhandler(500)
+    def handle_internal_error(e):
+        """Handle internal server errors"""
+        app.logger.error(f'Internal server error: {str(e)}')
+        return {'error': 'Internal server error', 'message': str(e)}, 500
+    
+    @app.errorhandler(HTTPException)
+    def handle_http_exception(e):
+        """Handle all HTTP exceptions"""
+        return {'error': e.description, 'code': e.code}, e.code
+    
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(e):
+        """Handle unexpected errors"""
+        app.logger.error(f'Unexpected error: {str(e)}', exc_info=True)
+        
+        # Track error
+        error_tracker.log_error(
+            error_type=type(e).__name__,
+            message=str(e),
+            traceback=str(e.__traceback__) if hasattr(e, '__traceback__') else None,
+            context={'endpoint': str(e)}
+        )
+        
+        # Don't expose internal error details in production
+        if app.config['DEBUG']:
+            return {'error': 'Unexpected error', 'details': str(e), 'type': type(e).__name__}, 500
+        return {'error': 'An unexpected error occurred'}, 500
+    
+    # Monitoring endpoints
+    @app.route('/api/monitoring/metrics')
+    def get_metrics():
+        """Get performance metrics (admin only in production)"""
+        return {
+            'performance': performance_monitor.get_stats(),
+            'errors': error_tracker.get_error_stats()
+        }, 2
+        if app.config['DEBUG']:
+            return {'error': 'Unexpected error', 'details': str(e), 'type': type(e).__name__}, 500
+        return {'error': 'An unexpected error occurred'}, 500
+    
     # Create tables (only if they don't exist)
     with app.app_context():
         try:
+            # Validate configuration
+            config_class.validate()
             db.create_all()
         except Exception as e:
             # Log error but don't fail - tables may already exist or be in process of creation
