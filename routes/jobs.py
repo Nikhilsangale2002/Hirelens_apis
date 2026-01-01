@@ -230,10 +230,11 @@ def get_job(job_id):
         
         job_data = job.to_dict(include_resumes=False)
         
-        # Calculate counts separately
-        candidates_count = Resume.query.filter_by(job_id=job_id).count()
-        shortlisted_count = Resume.query.filter_by(job_id=job_id, status='shortlisted').count()
-        rejected_count = Resume.query.filter_by(job_id=job_id, status='rejected').count()
+        # Calculate counts using .all() instead of .count()
+        all_candidates = Resume.query.filter_by(job_id=job_id).all()
+        candidates_count = len(all_candidates)
+        shortlisted_count = len([c for c in all_candidates if c.status == 'shortlisted'])
+        rejected_count = len([c for c in all_candidates if c.status == 'rejected'])
         
         job_data['candidates_count'] = candidates_count
         job_data['shortlisted_count'] = shortlisted_count

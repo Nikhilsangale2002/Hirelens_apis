@@ -8,7 +8,7 @@ psycopg2-binary==2.9.9
 mysqlclient==2.2.1
 PyPDF2==3.0.1
 python-docx==1.1.0
-google-generativeai==0.3.1
+google-generativeai==0.8.3
 Werkzeug==3.0.1
 gunicorn==21.2.0
 supabase==2.10.0

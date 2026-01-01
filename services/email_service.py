@@ -72,7 +72,7 @@ class EmailService:
         
         status_messages = {
             'shortlisted': {
-                'subject': f'🎉 Congratulations! You\'ve been shortlisted for {job_title}',
+                'subject': f'Congratulations! You\'ve been shortlisted for {job_title}',
                 'message': f'''
                     <p>Dear {candidate_name},</p>
                     <p>Great news! We're pleased to inform you that your application for the <strong>{job_title}</strong> position at {company_name} has been shortlisted.</p>
@@ -91,7 +91,7 @@ class EmailService:
                 '''
             },
             'hired': {
-                'subject': f'🎊 Congratulations! Job Offer for {job_title}',
+                'subject': f'Congratulations! Job Offer for {job_title}',
                 'message': f'''
                     <p>Dear {candidate_name},</p>
                     <p><strong>Congratulations!</strong> We are delighted to offer you the position of <strong>{job_title}</strong> at {company_name}.</p>
@@ -111,7 +111,8 @@ class EmailService:
                     <style>
                         body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
                         .container {{ max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; }}
-                        .header {{ background: linear-gradient(135deg, #004E89 0%, #FF6B35 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+                        .header {{ background: linear-gradient(135deg, #FF6B35 0%, #F77F00 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+                        .logo {{ width: 50px; height: 50px; background: linear-gradient(135deg, #FF6B35 0%, #F77F00 100%); border-radius: 10px; display: inline-block; margin: 0 auto 15px; font-size: 24px; font-weight: bold; line-height: 50px; text-align: center; color: white; border: 3px solid white; }}
                         .content {{ background: white; padding: 30px; border-radius: 0 0 10px 10px; }}
                         .footer {{ text-align: center; margin-top: 20px; color: #666; font-size: 12px; }}
                     </style>
@@ -119,7 +120,8 @@ class EmailService:
                 <body>
                     <div class="container">
                         <div class="header">
-                            <h1>{company_name}</h1>
+                            <h1 style="margin: 0; font-size: 28px;">HireLens</h1>
+                            <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">AI-Powered Recruitment</p>
                         </div>
                         <div class="content">
                             {template['message']}
@@ -142,10 +144,25 @@ class EmailService:
         return False
     
     def send_interview_invitation(self, candidate_name, candidate_email, job_title, interview_date, 
-                                  interview_type, meeting_link, duration_minutes, company_name):
+                                  interview_type, meeting_link, duration_minutes, company_name, ai_interview_link=None, access_code=None):
         """Send interview invitation email"""
         
         subject = f'Interview Invitation - {job_title} at {company_name}'
+        
+        # Build access code section for AI interviews
+        access_code_html = ''
+        if access_code and ai_interview_link:
+            access_code_html = f'''
+                <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+                    <h3 style="margin: 0 0 10px 0; color: #856404;">Your Interview Access Code</h3>
+                    <div style="background: white; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                        <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #004E89; font-family: monospace;">{access_code}</span>
+                    </div>
+                    <p style="margin: 10px 0 0 0; font-size: 14px; color: #856404;">
+                        Keep this code confidential. You'll need it to access your AI interview.
+                    </p>
+                </div>
+            '''
         
         html_content = f'''
             <!DOCTYPE html>
@@ -154,7 +171,8 @@ class EmailService:
                 <style>
                     body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
                     .container {{ max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; }}
-                    .header {{ background: linear-gradient(135deg, #004E89 0%, #FF6B35 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+                    .header {{ background: linear-gradient(135deg, #FF6B35 0%, #F77F00 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+                    .logo {{ width: 50px; height: 50px; background: linear-gradient(135deg, #FF6B35 0%, #F77F00 100%); border-radius: 10px; display: inline-block; margin: 0 auto 15px; font-size: 24px; font-weight: bold; line-height: 50px; text-align: center; color: white; border: 3px solid white; }}
                     .content {{ background: white; padding: 30px; border-radius: 0 0 10px 10px; }}
                     .interview-details {{ background: #f0f8ff; border-left: 4px solid #004E89; padding: 15px; margin: 20px 0; }}
                     .button {{ display: inline-block; padding: 12px 30px; background: #06A77D; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }}
@@ -164,20 +182,26 @@ class EmailService:
             <body>
                 <div class="container">
                     <div class="header">
-                        <h1>🎯 Interview Invitation</h1>
+                        <h1 style="margin: 0; font-size: 28px;">HireLens</h1>
+                        <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">Interview Invitation</p>
                     </div>
                     <div class="content">
                         <p>Dear {candidate_name},</p>
                         <p>We are pleased to invite you for a <strong>{interview_type}</strong> interview for the <strong>{job_title}</strong> position at {company_name}.</p>
                         
                         <div class="interview-details">
-                            <h3>📅 Interview Details:</h3>
+                            <h3>Interview Details:</h3>
                             <p><strong>Date & Time:</strong> {interview_date}</p>
                             <p><strong>Duration:</strong> {duration_minutes} minutes</p>
                             <p><strong>Type:</strong> {interview_type}</p>
                         </div>
                         
-                        {f'<p><a href="{meeting_link}" class="button">Join Interview</a></p>' if meeting_link else ''}
+                        {access_code_html}
+                        
+                        {f'<p style="text-align: center;"><a href="{ai_interview_link}" class="button">Start AI Interview</a></p>' if ai_interview_link else ''}
+                        {f'<p style="text-align: center;"><a href="{meeting_link}" class="button">Join Interview</a></p>' if meeting_link and not ai_interview_link else ''}
+                        
+                        {f'<p><strong>To start your AI interview:</strong><br>1. Click the button above<br>2. Enter your email address<br>3. Enter your access code: <code style="background: #f0f0f0; padding: 2px 8px; border-radius: 3px; font-weight: bold;">{access_code}</code></p>' if access_code else ''}
                         
                         <p>Please confirm your availability at your earliest convenience.</p>
                         <p>We look forward to speaking with you!</p>
@@ -202,7 +226,7 @@ class EmailService:
     def send_welcome_email(self, user_name, user_email, company_name=None):
         """Send welcome email to new users (first time only)"""
         
-        subject = f'🎉 Welcome to HireLens - Your AI-Powered Recruiting Platform!'
+        subject = f'Welcome to HireLens - Your AI-Powered Recruiting Platform!'
         
         html_content = f'''
             <!DOCTYPE html>
@@ -211,7 +235,8 @@ class EmailService:
                 <style>
                     body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
                     .container {{ max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; }}
-                    .header {{ background: linear-gradient(135deg, #004E89 0%, #FF6B35 100%); color: white; padding: 40px; text-align: center; border-radius: 10px 10px 0 0; }}
+                    .header {{ background: linear-gradient(135deg, #FF6B35 0%, #F77F00 100%); color: white; padding: 40px; text-align: center; border-radius: 10px 10px 0 0; }}
+                    .logo {{ width: 60px; height: 60px; background: linear-gradient(135deg, #FF6B35 0%, #F77F00 100%); border-radius: 12px; display: inline-block; margin: 0 auto 15px; font-size: 28px; font-weight: bold; line-height: 60px; text-align: center; color: white; border: 3px solid white; }}
                     .content {{ background: white; padding: 30px; border-radius: 0 0 10px 10px; }}
                     .feature-box {{ background: #f0f8ff; border-left: 4px solid #004E89; padding: 15px; margin: 15px 0; }}
                     .button {{ display: inline-block; padding: 15px 40px; background: linear-gradient(135deg, #06A77D 0%, #004E89 100%); color: white; text-decoration: none; border-radius: 8px; margin: 20px 0; font-weight: bold; }}
@@ -220,56 +245,55 @@ class EmailService:
                     .step::before {{ content: "✓"; position: absolute; left: 0; color: #06A77D; font-weight: bold; font-size: 18px; }}
                     .footer {{ text-align: center; margin-top: 30px; color: #666; font-size: 12px; padding: 20px; }}
                     h2 {{ color: #004E89; }}
-                    .emoji {{ font-size: 24px; }}
                 </style>
             </head>
             <body>
                 <div class="container">
                     <div class="header">
-                        <h1 style="margin: 0; font-size: 32px;">🚀 HireLens</h1>
+                        <h1 style="margin: 0; font-size: 32px;">HireLens</h1>
                         <p style="margin: 10px 0 0 0; font-size: 18px; opacity: 0.9;">AI-Powered Recruitment Made Easy</p>
                     </div>
                     <div class="content">
-                        <h2>Welcome Aboard, {user_name}! 🎉</h2>
+                        <h2>Welcome Aboard, {user_name}!</h2>
                         
                         <p>Thank you for joining HireLens{f" - {company_name}" if company_name else ""}! We're thrilled to have you on board and can't wait to help you transform your hiring process with the power of AI.</p>
                         
                         <div class="steps">
-                            <h3 style="margin-top: 0; color: #FF6B35;">🎯 Get Started in 3 Easy Steps:</h3>
+                            <h3 style="margin-top: 0; color: #FF6B35;">Get Started in 3 Easy Steps:</h3>
                             <div class="step">Post your first job opening and let candidates find you</div>
                             <div class="step">Upload candidate resumes and get instant AI-powered scoring</div>
                             <div class="step">Schedule interviews and track candidates through your pipeline</div>
                         </div>
                         
-                        <h3>✨ What You Can Do with HireLens:</h3>
+                        <h3>What You Can Do with HireLens:</h3>
                         
                         <div class="feature-box">
-                            <p><strong>🤖 AI Resume Analysis:</strong> Get intelligent scoring and matching for every candidate with our advanced AI algorithms.</p>
+                            <p><strong>AI Resume Analysis:</strong> Get intelligent scoring and matching for every candidate with our advanced AI algorithms.</p>
                         </div>
                         
                         <div class="feature-box">
-                            <p><strong>📅 Smart Interview Scheduling:</strong> Schedule interviews, send automated invitations, and manage your calendar effortlessly.</p>
+                            <p><strong>Smart Interview Scheduling:</strong> Schedule interviews, send automated invitations, and manage your calendar effortlessly.</p>
                         </div>
                         
                         <div class="feature-box">
-                            <p><strong>📊 Candidate Pipeline:</strong> Track candidates from application to hire with our intuitive dashboard.</p>
+                            <p><strong>Candidate Pipeline:</strong> Track candidates from application to hire with our intuitive dashboard.</p>
                         </div>
                         
                         <div class="feature-box">
-                            <p><strong>✉️ Automated Emails:</strong> Keep candidates informed with automated status updates and interview reminders.</p>
+                            <p><strong>Automated Emails:</strong> Keep candidates informed with automated status updates and interview reminders.</p>
                         </div>
                         
                         <div class="feature-box">
-                            <p><strong>🔔 Real-time Notifications:</strong> Stay updated with instant notifications for new applications and important events.</p>
+                            <p><strong>Real-time Notifications:</strong> Stay updated with instant notifications for new applications and important events.</p>
                         </div>
                         
                         <div style="text-align: center; margin: 30px 0;">
-                            <a href="http://localhost:3000/dashboard" class="button">Go to Dashboard →</a>
+                            <a href="http://localhost:3000/dashboard" class="button">Go to Dashboard</a>
                         </div>
                         
                         <p>If you have any questions or need assistance, our support team is here to help. Just reply to this email!</p>
                         
-                        <p style="margin-top: 30px;">Happy Hiring! 🎊<br>
+                        <p style="margin-top: 30px;">Happy Hiring!<br>
                         <strong>The HireLens Team</strong></p>
                     </div>
                     <div class="footer">

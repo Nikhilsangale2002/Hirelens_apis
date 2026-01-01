@@ -7,6 +7,7 @@ from routes.jobs import jobs_bp
 from routes.resumes import resumes_bp
 from routes.candidates import candidates_bp
 from routes.interviews import interviews_bp
+from routes.ai_interviews import ai_interviews
 from routes.users import users_bp
 from routes.contact import contact_bp
 from routes.dashboard import dashboard_bp
@@ -70,6 +71,7 @@ def create_app(config_class=Config):
     app.register_blueprint(resumes_bp, url_prefix='/api/resumes')
     app.register_blueprint(candidates_bp, url_prefix='/api/candidates')
     app.register_blueprint(interviews_bp, url_prefix='/api/interviews')
+    app.register_blueprint(ai_interviews, url_prefix='/api/ai')
     app.register_blueprint(users_bp, url_prefix='/api/users')
     app.register_blueprint(contact_bp, url_prefix='/api')
     app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')

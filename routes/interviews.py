@@ -4,11 +4,15 @@ from models.job import Job
 from models.resume import Resume
 from models.interview import Interview
 from models.user import User
-from extensions import db, cache_delete_pattern
+from extensions import db, cache_delete_pattern, cache_get, cache_set, redis_client
 from services.email_service import EmailService
 from routes.notifications import create_notification
+from config import Config
 from datetime import datetime
 import logging
+import random
+import string
+import json
 
 interviews_bp = Blueprint('interviews', __name__)
 logger = logging.getLogger(__name__)
@@ -19,6 +23,15 @@ def schedule_interview():
     """Schedule an interview for a candidate"""
     try:
         user_id = int(get_jwt_identity())  # Convert to int for DB queries
+        
+        # Rate limiting: Max 10 interviews per hour per user
+        rate_limit_key = f"interview_schedule_limit:{user_id}"
+        scheduled_count = redis_client.get(rate_limit_key)
+        if scheduled_count and int(scheduled_count) >= 10:
+            return jsonify({
+                'error': 'Rate limit exceeded. Maximum 10 interviews per hour. Please try again later.'
+            }), 429
+        
         data = request.get_json()
         
         resume_id = data.get('resume_id')
@@ -53,6 +66,11 @@ def schedule_interview():
         except ValueError:
             return jsonify({'error': 'Invalid date format. Use ISO format'}), 400
         
+        # Generate 6-character access code for AI interviews
+        access_code = None
+        if interview_mode == 'ai':
+            access_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        
         # Create interview
         interview = Interview(
             resume_id=resume_id,
@@ -66,7 +84,8 @@ def schedule_interview():
             interviewer_name=interviewer_name,
             interviewer_email=interviewer_email,
             notes=notes,
-            status='scheduled'
+            status='scheduled',
+            access_code=access_code
         )
         
         db.session.add(interview)
@@ -77,6 +96,11 @@ def schedule_interview():
             user = User.query.get(user_id)
             company_name = user.company or 'HireLens'
             
+            # Generate AI interview link if it's an AI interview
+            ai_interview_link = None
+            if interview_mode == 'ai':
+                ai_interview_link = f"{Config.FRONTEND_URL}/interview/{interview.id}/login"
+            
             email_service = EmailService()
             email_service.send_interview_invitation(
                 candidate_name=candidate.candidate_name,
@@ -86,15 +110,25 @@ def schedule_interview():
                 interview_type=interview_type.capitalize(),
                 meeting_link=meeting_link,
                 duration_minutes=duration_minutes,
-                company_name=company_name
+                company_name=company_name,
+                ai_interview_link=ai_interview_link,
+                access_code=access_code
             )
             logger.info(f"Interview invitation sent to {candidate.email}")
         except Exception as e:
             logger.error(f"Failed to send interview invitation: {str(e)}")
         
+        # Increment rate limit counter (1 hour TTL)
+        current_count = redis_client.get(rate_limit_key)
+        if current_count:
+            redis_client.incr(rate_limit_key)
+        else:
+            redis_client.setex(rate_limit_key, 3600, 1)  # 1 hour TTL
+        
         # Invalidate caches
-        cache_delete_pattern(f"interviews:*:{resume_id}")
-        cache_delete_pattern(f"interviews:*:{job_id}")
+        cache_delete_pattern(f"interviews:candidate:{resume_id}")
+        cache_delete_pattern(f"interviews:job:{job_id}")
+        cache_delete_pattern(f"interviews:user:{user_id}")
         
         # Create notification for recruiter
         try:
@@ -127,6 +161,12 @@ def get_candidate_interviews(resume_id):
     try:
         user_id = int(get_jwt_identity())  # Convert to int for DB queries
         
+        # Try to get from cache first
+        cache_key = f"interviews:candidate:{resume_id}"
+        cached_data = cache_get(cache_key)
+        if cached_data:
+            return jsonify(json.loads(cached_data)), 200
+        
         # Get the candidate first
         candidate = Resume.query.get(resume_id)
         if not candidate:
@@ -148,10 +188,15 @@ def get_candidate_interviews(resume_id):
         # Get interviews for this candidate
         interviews = Interview.query.filter_by(resume_id=resume_id).order_by(Interview.scheduled_date.desc()).all()
         
-        return jsonify({
+        result = {
             'interviews': [i.to_dict() for i in interviews],
             'total': len(interviews)
-        }), 200
+        }
+        
+        # Cache for 5 minutes
+        cache_set(cache_key, json.dumps(result), 300)
+        
+        return jsonify(result), 200
         
     except Exception as e:
         logger.error(f"Get candidate interviews error: {str(e)}")
@@ -164,6 +209,12 @@ def get_job_interviews(job_id):
     """Get all interviews for a job"""
     try:
         user_id = int(get_jwt_identity())  # Convert to int for DB queries
+        
+        # Try to get from cache first
+        cache_key = f"interviews:job:{job_id}"
+        cached_data = cache_get(cache_key)
+        if cached_data:
+            return jsonify(json.loads(cached_data)), 200
         
         # Verify job belongs to user
         job = Job.query.filter_by(id=job_id, user_id=user_id).first()
@@ -182,10 +233,15 @@ def get_job_interviews(job_id):
                 interview_dict['candidate_email'] = candidate.email
             interviews_data.append(interview_dict)
         
-        return jsonify({
+        result = {
             'interviews': interviews_data,
             'total': len(interviews_data)
-        }), 200
+        }
+        
+        # Cache for 5 minutes
+        cache_set(cache_key, json.dumps(result), 300)
+        
+        return jsonify(result), 200
         
     except Exception as e:
         logger.error(f"Get job interviews error: {str(e)}")
@@ -230,8 +286,8 @@ def update_interview(interview_id):
         db.session.commit()
         
         # Invalidate caches
-        cache_delete_pattern(f"interviews:*:{interview.resume_id}")
-        cache_delete_pattern(f"interviews:*:{interview.job_id}")
+        cache_delete_pattern(f"interviews:candidate:{interview.resume_id}")
+        cache_delete_pattern(f"interviews:job:{interview.job_id}")
         
         return jsonify({
             'message': 'Interview updated successfully',
@@ -267,8 +323,8 @@ def delete_interview(interview_id):
         db.session.commit()
         
         # Invalidate caches
-        cache_delete_pattern(f"interviews:*:{resume_id}")
-        cache_delete_pattern(f"interviews:*:{job_id}")
+        cache_delete_pattern(f"interviews:candidate:{resume_id}")
+        cache_delete_pattern(f"interviews:job:{job_id}")
         
         return jsonify({'message': 'Interview cancelled successfully'}), 200
         

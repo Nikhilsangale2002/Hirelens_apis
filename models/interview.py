@@ -18,9 +18,15 @@ class Interview(db.Model):
     status = db.Column(db.String(50), default='scheduled')  # scheduled, completed, cancelled, no-show
     notes = db.Column(db.Text)
     feedback = db.Column(db.Text)
-    ai_questions = db.Column(db.JSON)  # For AI interviews
-    ai_responses = db.Column(db.JSON)  # For AI interviews
+    ai_questions = db.Column(db.Text)  # For AI interviews (stored as JSON string)
+    ai_responses = db.Column(db.Text)  # For AI interviews (stored as JSON string)
     ai_score = db.Column(db.Float)
+    ai_feedback = db.Column(db.Text)
+    ai_analysis = db.Column(db.Text)  # Complete AI analysis (stored as JSON string)
+    video_responses = db.Column(db.Text)  # Video URLs (stored as JSON string)
+    interview_status = db.Column(db.String(20))  # pending, in_progress, completed
+    completed_at = db.Column(db.DateTime)
+    access_code = db.Column(db.String(6))  # 6-character access code for candidate authentication
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -43,6 +49,11 @@ class Interview(db.Model):
             'ai_questions': self.ai_questions,
             'ai_responses': self.ai_responses,
             'ai_score': self.ai_score,
+            'ai_feedback': self.ai_feedback,
+            'ai_analysis': self.ai_analysis,
+            'video_responses': self.video_responses,
+            'interview_status': self.interview_status,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

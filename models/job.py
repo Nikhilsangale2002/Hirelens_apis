@@ -39,7 +39,13 @@ class Job(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
         
+        # Add candidate counts
+        all_candidates = self.resumes.all()
+        data['candidates_count'] = len(all_candidates)
+        data['shortlisted_count'] = len([c for c in all_candidates if c.status == 'shortlisted'])
+        data['rejected_count'] = len([c for c in all_candidates if c.status == 'rejected'])
+        
         if include_resumes:
-            data['resumes'] = [r.to_dict() for r in self.resumes.all()]
+            data['resumes'] = [r.to_dict() for r in all_candidates]
         
         return data

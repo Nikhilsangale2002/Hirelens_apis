@@ -34,19 +34,20 @@ def get_notifications():
             }), 200
         
         # Get notifications
-        if unread_only:
-            notifications = Notification.query.filter_by(user_id=user_id, is_read=False).order_by(Notification.created_at.desc()).limit(limit).offset(offset).all()
-            total = len(notifications)
-        else:
-            notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).limit(limit).offset(offset).all()
-            total = len(notifications)
+        query = Notification.query.filter_by(user_id=user_id)
         
-        # Get unread count separately
-        unread_count = Notification.query.filter_by(user_id=user_id, is_read=False).count()
+        if unread_only:
+            query = query.filter_by(is_read=False)
+        
+        notifications = query.order_by(Notification.created_at.desc()).limit(limit).offset(offset).all()
+        
+        # Get unread count in separate query
+        unread_notifications = Notification.query.filter_by(user_id=user_id, is_read=False).all()
+        unread_count = len(unread_notifications)
         
         result = {
             'notifications': [n.to_dict() for n in notifications],
-            'total': total,
+            'total': len(notifications),
             'unread_count': unread_count
         }
         
@@ -80,7 +81,9 @@ def get_unread_count():
                 'cached': True
             }), 200
         
-        unread_count = Notification.query.filter_by(user_id=user_id, is_read=False).count()
+        # Get all unread and count
+        unread_notifications = Notification.query.filter_by(user_id=user_id, is_read=False).all()
+        unread_count = len(unread_notifications)
         
         # Cache for 10 seconds
         cache_set(cache_key, unread_count, expire=10)

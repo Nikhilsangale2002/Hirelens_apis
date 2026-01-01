@@ -39,6 +39,9 @@ class Config:
     FROM_EMAIL = os.getenv('FROM_EMAIL', os.getenv('MAIL_DEFAULT_SENDER', 'noreply@hirelens.ai'))
     FROM_NAME = os.getenv('FROM_NAME', 'HireLens Recruitment')
     
+    # Frontend URL
+    FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+    
     # JWT - Hybrid Security Approach
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=30)  # Long-lived session
