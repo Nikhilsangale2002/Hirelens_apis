@@ -147,11 +147,15 @@ def request_logger_middleware(app):
         
         # Log request body for POST/PUT (excluding sensitive data)
         if request.method in ['POST', 'PUT', 'PATCH'] and request.is_json:
-            body = request.get_json()
-            # Redact sensitive fields
-            safe_body = {k: '***' if k in ['password', 'token', 'secret'] else v 
-                        for k, v in body.items()}
-            logger.debug(f"Request body: {json.dumps(safe_body)}")
+            try:
+                body = request.get_json(silent=True)
+                if body:
+                    # Redact sensitive fields
+                    safe_body = {k: '***' if k in ['password', 'token', 'secret'] else v 
+                                for k, v in body.items()}
+                    logger.debug(f"Request body: {json.dumps(safe_body)}")
+            except Exception as e:
+                logger.debug(f"Could not parse request body: {str(e)}")
     
     @app.after_request
     def after_request(response):

@@ -244,7 +244,7 @@ def get_current_user():
         user_id = int(get_jwt_identity())  # Convert string back to int
         current_app.logger.info(f'JWT Identity: {user_id}')
         
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         
         if not user:
             current_app.logger.error(f'User not found for ID: {user_id}')
@@ -283,7 +283,7 @@ def logout():
         UserSession.query.filter_by(user_id=user_id, is_active=True).update({'is_active': False})
         
         # Clear refresh token
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if user:
             user.refresh_token = None
             user.token_expires_at = None
@@ -364,7 +364,7 @@ def validate_token():
         db.session.commit()
         
         # Get user info
-        user = User.query.get(session.user_id)
+        user = db.session.get(User, session.user_id)
         
         if not user or not user.is_active:
             return jsonify({'error': 'User not found or inactive', 'valid': False}), 401

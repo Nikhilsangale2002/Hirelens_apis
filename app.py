@@ -1,5 +1,10 @@
 from flask import Flask
 from flask_cors import CORS
+from dotenv import load_dotenv
+
+# Load environment variables FIRST before importing Config
+load_dotenv()
+
 from config import Config
 from extensions import db, jwt, init_redis, mail
 from migrate_config import init_migrate
@@ -14,6 +19,7 @@ from routes.users import users_bp
 from routes.contact import contact_bp
 from routes.dashboard import dashboard_bp
 from routes.notifications import notifications_bp
+from routes.chat import chat_bp
 from werkzeug.exceptions import HTTPException
 import threading
 import time
@@ -57,6 +63,17 @@ def create_app(config_class=Config):
     mail.init_app(app)  # Initialize Mail
     init_migrate(app)  # Initialize Flask-Migrate
     
+    # Dispose of any stale database connections on startup
+    with app.app_context():
+        try:
+            db.engine.dispose()
+            # Force a new connection to verify database is accessible
+            with db.engine.connect() as conn:
+                conn.execute(db.text("SELECT 1"))
+            app.logger.info('Database connection pool disposed and ready')
+        except Exception as e:
+            app.logger.warning(f'Could not dispose connection pool: {e}')
+    
     # Initialize monitoring middleware
     request_logger_middleware(app)
     
@@ -86,13 +103,19 @@ def create_app(config_class=Config):
         app.logger.warning('Token revoked')
         return {'error': 'Token has been revoked'}, 401
     
+    @jwt.token_verification_failed_loader
+    def token_verification_failed_callback(jwt_header, jwt_payload):
+        app.logger.error(f'Token verification failed: header={jwt_header}, payload={jwt_payload}')
+        return {'error': 'Token verification failed'}, 400
+    
     # Configure CORS with specific origin (security improvement)
-    allowed_origins = app.config.get('ALLOWED_ORIGINS', 'http://localhost:3000')
+    allowed_origins = app.config.get('ALLOWED_ORIGINS', 'http://localhost:3000,https://hgz4gwqg-3000.inc1.devtunnels.ms,https://hgz4gwqg-3001.inc1.devtunnels.ms,http://192.168.1.4:3000,http://192.168.1.4:3001')
     CORS(app, 
          origins=allowed_origins.split(','),
          supports_credentials=True,
          allow_headers=['Content-Type', 'Authorization', 'X-Session-Token'],
-         expose_headers=['X-RateLimit-Remaining', 'X-RateLimit-Reset']
+         expose_headers=['X-RateLimit-Remaining', 'X-RateLimit-Reset'],
+         methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
     )
     
     # Register blueprints
@@ -106,6 +129,7 @@ def create_app(config_class=Config):
     app.register_blueprint(contact_bp, url_prefix='/api')
     app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
+    app.register_blueprint(chat_bp, url_prefix='/api')
     
     # Centralized error handlers
     @app.errorhandler(ValidationError)

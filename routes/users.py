@@ -26,7 +26,7 @@ def get_profile():
             return jsonify({'profile': cached_profile, 'cached': True}), 200
         
         # If not in cache, get from database
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         
         if not user:
             current_app.logger.error(f"User not found: ID={user_id}")
@@ -64,7 +64,7 @@ def update_profile():
     """Update current user's profile"""
     try:
         user_id = int(get_jwt_identity())
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -174,7 +174,7 @@ def change_password():
     """Change user password"""
     try:
         user_id = int(get_jwt_identity())
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -222,7 +222,7 @@ def get_plan():
         if cached_plan:
             return jsonify({'plan': cached_plan, 'cached': True}), 200
         
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         
         if not user:
             current_app.logger.error(f"User not found for plan: ID={user_id}")
@@ -321,7 +321,7 @@ def get_email_config():
     """Get user's email configuration"""
     try:
         user_id = int(get_jwt_identity())
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -347,7 +347,7 @@ def update_email_config():
     """Update user's email configuration"""
     try:
         user_id = int(get_jwt_identity())
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -392,7 +392,7 @@ def send_test_email():
     """Send a test email to verify SMTP configuration"""
     try:
         user_id = int(get_jwt_identity())
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         
         if not user:
             return jsonify({'error': 'User not found'}), 404

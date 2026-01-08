@@ -102,17 +102,21 @@ def get_unread_count():
 def mark_as_read(notification_id):
     """Mark a notification as read"""
     try:
+        logger.info(f"Mark as read called for notification {notification_id}")
         user_id = int(get_jwt_identity())
+        logger.info(f"User ID: {user_id}")
         
         notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
         
         if not notification:
+            logger.warning(f"Notification {notification_id} not found for user {user_id}")
             return jsonify({'error': 'Notification not found'}), 404
         
         if not notification.is_read:
             notification.is_read = True
             notification.read_at = datetime.utcnow()
             db.session.commit()
+            logger.info(f"Notification {notification_id} marked as read")
             
             # Invalidate cache
             cache_delete_pattern(f"notifications:{user_id}:*")
@@ -125,7 +129,7 @@ def mark_as_read(notification_id):
         
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Mark as read error: {str(e)}")
+        logger.error(f"Mark as read error: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @notifications_bp.route('/mark-all-read', methods=['PUT'])

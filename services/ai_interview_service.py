@@ -15,7 +15,9 @@ class AIInterviewService:
         self.model_name: str = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
         
         if not self.api_key:
-            raise ValueError("GEMINI_API_KEY not found in environment variables")
+            print("⚠️  WARNING: GEMINI_API_KEY not found. AI interview features will be disabled.")
+            self.model = None
+            return
         
         genai.configure(api_key=self.api_key)
         self.model = genai.GenerativeModel(self.model_name)
@@ -24,6 +26,9 @@ class AIInterviewService:
         """
         Call Gemini AI with the given prompt
         """
+        if not self.model:
+            return json.dumps({"error": "AI service not configured. Please set GEMINI_API_KEY."})
+        
         response = self.model.generate_content(
             prompt,
             generation_config={

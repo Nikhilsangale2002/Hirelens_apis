@@ -15,12 +15,16 @@ class Config:
     
     # MySQL Connection Pool Settings (Fix "Lost connection" errors)
     SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_size': 10,
-        'pool_recycle': 3600,  # Recycle connections after 1 hour
+        'pool_size': 5,
+        'pool_recycle': 1800,  # Recycle connections after 30 minutes
         'pool_pre_ping': True,  # Verify connections before using
-        'max_overflow': 20,
+        'max_overflow': 10,
         'pool_timeout': 30,
-        'echo': False
+        'echo': False,
+        'pool_reset_on_return': 'rollback',  # Reset connections on return to pool
+        'connect_args': {
+            'connect_timeout': 10
+        }
     }
     
     # Redis Configuration
@@ -56,6 +60,9 @@ class Config:
     JWT_TOKEN_LOCATION = ['headers']
     JWT_HEADER_NAME = 'Authorization'
     JWT_HEADER_TYPE = 'Bearer'
+    JWT_COOKIE_CSRF_PROTECT = False  # Disable CSRF for cookie-based tokens
+    JWT_CSRF_IN_COOKIES = False  # Don't use cookies for CSRF
+    JWT_CSRF_CHECK_FORM = False  # Don't check form data for CSRF token
     
     # File Upload
     UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
